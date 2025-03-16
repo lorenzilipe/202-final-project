@@ -40,3 +40,45 @@ class Neo4jConnector:
         except Exception as e:
             print(f"Query execution error: {str(e)}")
             return []
+
+    def get_collaborative_recommendations(self, user_id, min_rating=4.0, min_common_books=2, limit=10):
+        """
+        Returns collaborative filtering recommendations based on the user's ratings.
+        The query assumes that each user has INTERACTED relationships with Book nodes, 
+        with a 'rating' property.
+        """
+        cf_query = """
+        // Step 1: Get books the target user rated highly.
+        MATCH (target:User {user_id: $user_id})-[r:INTERACTED]->(b:Book)
+        WHERE r.rating >= $min_rating
+        WITH target, collect(b.work_id) AS targetBooks
+
+        // Step 2: Find similar users who also rated these books highly.
+        MATCH (target)-[r:INTERACTED]->(b:Book)<-[:INTERACTED]-(other:User)
+        WHERE r.rating >= $min_rating AND other.user_id <> target.user_id
+        WITH target, other, count(b) AS commonBooks, targetBooks
+        WHERE commonBooks >= $min_common_books
+
+        // Step 3: Retrieve additional books that these similar users rated highly.
+        MATCH (other)-[r2:INTERACTED]->(rec:Book)
+        WHERE r2.rating >= $min_rating AND NOT rec.work_id IN targetBooks
+        WITH rec, count(DISTINCT other) AS similarUserCount, avg(r2.rating) AS avgRating
+        RETURN rec.work_id AS work_id, rec.title AS title, similarUserCount, avgRating,
+               (similarUserCount * avgRating) AS cf_score
+        ORDER BY cf_score DESC
+        LIMIT $limit
+        """
+        params = {
+            "user_id": user_id,
+            "min_rating": min_rating,
+            "min_common_books": min_common_books,
+            "limit": limit
+        }
+        return self.execute_query(cf_query, params)
+
+    def get_all_book_titles(self, limit=1000):
+        """
+        Returns a list of all book titles and their work_ids from the database.
+        """
+        query = "MATCH (b:Book) RETURN b.title AS title, b.work_id AS work_id LIMIT $limit"
+        return self.execute_query(query, {"limit": limit})
