@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import socket
 
 class QdrantConnector:
-    def __init__(self, debug_area=None):
+    def __init__(self):
         load_dotenv()
         
         self.qdrant_url = os.getenv("QDRANT_URL")
@@ -14,26 +14,15 @@ class QdrantConnector:
         self.model = None
         self.model_name = "all-MiniLM-L6-v2"  # Default model
         self.collection_name = "books"  # Fixed collection name
-        self.debug_area = debug_area  # Store reference to debug area
+        
+        # We don't store debug_area anymore, we'll use the log function that's overridden from main.py
 
     def log(self, message, level="info"):
-        """Log message to Streamlit if debug area exists, otherwise print"""
-        print(message)  # Always print to console
-        
-        if self.debug_area:
-            # small delay using st.empty() to avoid state conflicts
-            import time
-            time.sleep(0.1)  # Small delay to prevent message collisions
-            
-            # Use the appropriate Streamlit method based on level
-            if level == "error":
-                self.debug_area.error(message)
-            elif level == "warning":
-                self.debug_area.warning(message)
-            elif level == "success":
-                self.debug_area.success(message)
-            else:
-                self.debug_area.info(message)
+        """
+        Log message - this will be overridden by main.py
+        Default implementation just prints to console
+        """
+        print(f"[{level.upper()}] {message}")
 
     def connect(self):
         """Connect to Qdrant and return success status and message"""
@@ -47,7 +36,7 @@ class QdrantConnector:
             self.log("Qdrant API key is not set. Check your .env file.", level="error")
             return False, "Qdrant API key is not set. Check your .env file."
         
-        print(f"Connecting to Qdrant at: {self.qdrant_url}")
+        self.log(f"Connecting to Qdrant at: {self.qdrant_url}")
         
         try:
             # Create client with appropriate timeout
@@ -58,79 +47,29 @@ class QdrantConnector:
                 prefer_grpc=False  # Use HTTP API to avoid some validation errors
             )
         
-            # Test connection using a simpler method that's less likely to cause validation errors
+            # Test connection
             try:
-                # First try a simple health check which is less likely to have schema issues
+                # First try a simple health check
                 health_status = self.client.http.health()
                 self.log("Qdrant health check successful", level="success")
             except Exception as health_err:
-                self.log(f"Health check failed, but will try to continue: {str(health_err)}", level="warning")
+                self.log(f"Health check failed, but will continue: {str(health_err)}", level="warning")
             
             # Get collections list
-            try:
-                collections_list = self.client.http.collections_api.get_collections()
-                available_collections = [c.name for c in collections_list.collections]
-                self.log(f"Connected to Qdrant. Available collections: {available_collections}", level="success")
-                
-                # Check if books collection exists
-                if self.collection_name not in available_collections:
-                    self.log(f"'{self.collection_name}' collection not found in Qdrant", level="warning")
-                    return False, f"'{self.collection_name}' collection not found in Qdrant"
-                
-                # If we got here, we have a working connection
-                return True, "Successfully connected to Qdrant"
-                
-            except Exception as list_err:
-                # If we can't list collections, try a direct check for our collection
-                self.log(f"Failed to list collections: {str(list_err)}", level="warning")
-                
-                try:
-                    # Try to directly check if our collection exists
-                    collection_exists = self.client.http.collections_api.collection_exists(self.collection_name)
-                    if collection_exists:
-                        self.log(f"Collection '{self.collection_name}' exists", level="success")
-                        return True, f"Connected to Qdrant. Collection '{self.collection_name}' exists."
-                    else:
-                        self.log(f"Collection '{self.collection_name}' does not exist", level="warning")
-                        return False, f"Collection '{self.collection_name}' does not exist"
-                except Exception as exists_err:
-                    self.log(f"Failed to check collection existence: {str(exists_err)}", level="error")
-                    # Continue to search test as a last resort
+            collections = self.client.get_collections()
+            available_collections = [c.name for c in collections.collections]
+            self.log(f"Connected to Qdrant. Available collections: {available_collections}", level="success")
             
-            # If we couldn't verify the collection, try a simple search as a last resort
-            try:
-                self.log("Attempting direct search as a connection test...", level="info")
-                if not self.model:
-                    self.load_model()
-                test_vector = self.model.encode("test query").tolist()
+            # Check if books collection exists
+            if self.collection_name not in available_collections:
+                self.log(f"'{self.collection_name}' collection not found in Qdrant", level="warning")
+                return False, f"'{self.collection_name}' collection not found in Qdrant"
                 
-                # Perform a minimal search with just one result
-                search_result = self.client.search(
-                    collection_name=self.collection_name,
-                    query_vector=test_vector,
-                    limit=1
-                )
-                self.log("Search test successful, connection is working", level="success")
-                return True, "Connected to Qdrant (verified through search)"
-            
-            except Exception as search_err:
-                error_msg = str(search_err)
-                
-                # This is a special case - if we get a 404 on search, the collection doesn't exist
-                if "404" in error_msg:
-                    self.log(f"Collection '{self.collection_name}' not found", level="error")
-                    return False, f"Collection '{self.collection_name}' not found"
-                
-                self.log(f"Search test failed: {error_msg}", level="error")
-                return False, f"Failed to verify connection: {error_msg}"
+            return True, "Successfully connected to Qdrant"
             
         except Exception as e:
             error_message = f"Failed to connect to Qdrant: {str(e)}"
             self.log(error_message, level="error")
-            
-            if "validation errors" in str(e).lower():
-                self.log("Validation error detected - this might be due to a version mismatch between client and server", level="warning")
-                
             return False, error_message
     
     def load_model(self):

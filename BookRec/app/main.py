@@ -9,18 +9,30 @@ st.set_page_config(
     layout="wide"
 )
 
-# Create a dedicated area for debug messages
-st.title("Book Recommender System")
-debug_area = st.container()
+# Create a more stable way to handle debug messages
+if "debug_messages" not in st.session_state:
+    st.session_state.debug_messages = []
+
+# Function to log messages in a stable way
+def log_to_debug(message, level="info"):
+    st.session_state.debug_messages.append({"message": message, "level": level})
+    print(message)  # Also print to console
 
 # Initialize database connections
 @st.cache_resource
 def init_connections():
     neo4j_conn = Neo4jConnector()
-    qdrant_conn = QdrantConnector(debug_area=debug_area)
+    # Don't pass the debug_area directly, we'll use our custom logging instead
+    qdrant_conn = QdrantConnector()
     return neo4j_conn, qdrant_conn
 
 neo4j_conn, qdrant_conn = init_connections()
+
+# Override Qdrant connector's log method
+qdrant_conn.log = log_to_debug
+
+# Set up the UI
+st.title("Book Recommender System")
 
 # Create two columns for database status
 col1, col2 = st.columns(2)
@@ -31,8 +43,10 @@ with col1:
     if st.button("Test Neo4j Connection", key="neo4j_test"):
         if neo4j_conn.connect():
             st.success("Neo4j Connection Successful")
+            log_to_debug("Connected to Neo4j successfully", "success")
         else:
             st.error("Neo4j Connection Failed")
+            log_to_debug("Failed to connect to Neo4j", "error")
 
 # Qdrant Column
 with col2:
@@ -41,8 +55,10 @@ with col2:
         status, message = qdrant_conn.connect()
         if status:
             st.success("Qdrant Connection Successful")
+            log_to_debug("Connected to Qdrant successfully", "success")
         else:
             st.error(f"Qdrant Connection Failed: {message}")
+            log_to_debug(f"Failed to connect to Qdrant: {message}", "error")
 
 # Book search section
 st.header("Book Search")
@@ -101,6 +117,18 @@ if submit_button:
             else:
                 st.warning("No matching books found. Try a different search.")
 
-# Debug messages expander (minimized by default)
+# Debug messages expander
 with st.expander("Debug Messages", expanded=False):
-    st.write("Debug messages will appear here")
+    if not st.session_state.debug_messages:
+        st.write("No debug messages yet. Click the test buttons above to see connection debug messages.")
+    else:
+        # Display debug messages in reverse order (newest first)
+        for msg in reversed(st.session_state.debug_messages):
+            if msg["level"] == "error":
+                st.error(msg["message"])
+            elif msg["level"] == "warning":
+                st.warning(msg["message"])
+            elif msg["level"] == "success":
+                st.success(msg["message"])
+            else:
+                st.info(msg["message"])
