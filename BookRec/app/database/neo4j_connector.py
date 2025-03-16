@@ -29,8 +29,14 @@ class Neo4jConnector:
             print("Neo4j connection closed")
     
     def execute_query(self, query, parameters=None):
-        assert self.driver is not None, "Driver not initialized. Call connect() first."
+        if not self.driver:
+            print("Driver not initialized. Call connect() first.")
+            return []
         
-        with self.driver.session() as session:
-            result = session.run(query, parameters or {})
-            return [record.data() for record in result]
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, parameters or {})
+                return [record.data() for record in result]
+        except Exception as e:
+            print(f"Query execution error: {str(e)}")
+            return []
