@@ -76,7 +76,7 @@ mode = st.radio("Choose how you want to get recommendations:",
 # --------------------------
 # Mode: Rate Books
 # --------------------------
-# In this mode, the user selects books via auto-complete using available book titles from Neo4j and rates them.
+# In Rate Books mode, the user selects books via auto-complete (from Neo4j) and rates them.
 rated_books_data = {}
 if mode == "Rate Books":
     st.subheader("Rate Books")
@@ -162,13 +162,27 @@ if st.button("Get Recommendations"):
             semantic_results = qdrant_conn.format_results(qdrant_results)
 
     # --------------------------
+    # Insert Ratings into Neo4j (Only for Rate Books Mode)
+    # --------------------------
+    if mode == "Rate Books" and rated_books_data:
+        with st.spinner("Saving your ratings to Neo4j..."):
+            neo4j_conn.insert_user_ratings(user_id=user_id, rated_books_data=rated_books_data)
+            log_to_debug(f"Inserted ratings for user {user_id}", "info")
+
+    # --------------------------
     # Neo4j Collaborative Filtering Part (Only for Rate Books Mode)
     # --------------------------
     cf_results = []
     if mode == "Rate Books":
-        with st.spinner("Computing collaborative filtering recommendations via Neo4j..."):
-            cf_results = neo4j_conn.get_collaborative_recommendations(user_id=user_id, limit=10)
-            log_to_debug(f"CF Results: {cf_results}", "info")
+        # Check if at least 2 books are rated 4.0 or above.
+        count_high_ratings = sum(1 for data in rated_books_data.values() if data["rating"] >= 4.0)
+        if count_high_ratings < 2:
+            st.error("Please rate at least 2 books with a rating of 4.0 or higher for collaborative filtering recommendations.")
+            log_to_debug("Not enough high ratings to perform CF.", "warning")
+        else:
+            with st.spinner("Computing collaborative filtering recommendations via Neo4j..."):
+                cf_results = neo4j_conn.get_collaborative_recommendations(user_id=user_id, limit=10)
+                log_to_debug(f"CF Results: {cf_results}", "info")
 
     # --------------------------
     # Aggregation of Recommendations
@@ -219,6 +233,14 @@ if st.button("Get Recommendations"):
                 st.divider()
     else:
         st.warning("No recommendations found.")
+
+    # --------------------------
+    # Clear Temporary User Data (for temp_user only)
+    # --------------------------
+    if user_id == "temp_user":
+        with st.spinner("Clearing temporary user ratings from Neo4j..."):
+            neo4j_conn.clear_temp_user(user_id)
+            log_to_debug("Cleared temp_user data", "info")
 
 # --------------------------
 # Debug Messages Section

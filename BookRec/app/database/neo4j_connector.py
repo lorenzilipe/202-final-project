@@ -82,3 +82,33 @@ class Neo4jConnector:
         """
         query = "MATCH (b:Book) RETURN b.title AS title, b.work_id AS work_id LIMIT $limit"
         return self.execute_query(query, {"limit": limit})
+    
+    def insert_user_ratings(self, user_id, rated_books_data):
+        """
+        Inserts ratings for a given user into the database.
+        rated_books_data should be a dictionary where each key is a work_id and each value is a dictionary
+        with at least a 'rating' key.
+        """
+        query = """
+        UNWIND $ratings AS ratingData
+        MERGE (u:User {user_id: $user_id})
+        WITH u, ratingData
+        MATCH (b:Book {work_id: ratingData.work_id})
+        MERGE (u)-[r:INTERACTED]->(b)
+        SET r.rating = ratingData.rating
+        """
+        params = {
+            "user_id": user_id,
+            "ratings": [{"work_id": work_id, "rating": data["rating"]} for work_id, data in rated_books_data.items()]
+        }
+        return self.execute_query(query, params)
+
+    def clear_temp_user(self, user_id):
+        """
+        Clears the temporary user's data by deleting the user node and all its relationships.
+        """
+        query = """
+        MATCH (u:User {user_id: $user_id})
+        DETACH DELETE u
+        """
+        return self.execute_query(query, {"user_id": user_id})
