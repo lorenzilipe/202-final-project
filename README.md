@@ -1,8 +1,6 @@
 # DSC 202 Final Project
 
-# Link to presentation
-
-[https://www.youtube.com/watch?v=pKXsPabvcv0](https://www.youtube.com/watch?v=pKXsPabvcv0)
+**Link to presentation:** [https://www.youtube.com/watch?v=pKXsPabvcv0](https://www.youtube.com/watch?v=pKXsPabvcv0)
 
 # Installation
 
