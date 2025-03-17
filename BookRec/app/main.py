@@ -1,6 +1,8 @@
 import streamlit as st
 from database.neo4j_connector import Neo4jConnector
 from database.qdrant_connector import QdrantConnector
+from database.postgres_connector import PostgresConnector
+import datetime
 
 # Set page configuration
 st.set_page_config(
@@ -26,20 +28,18 @@ def log_to_debug(message, level="info"):
 def init_connections():
     neo4j_conn = Neo4jConnector()
     qdrant_conn = QdrantConnector()
-    return neo4j_conn, qdrant_conn
+    pg_conn = PostgresConnector()
+    pg_conn.connect()  # Connect to PostgreSQL
+    return neo4j_conn, qdrant_conn, pg_conn
 
-neo4j_conn, qdrant_conn = init_connections()
+neo4j_conn, qdrant_conn, pg_conn = init_connections()
 qdrant_conn.log = log_to_debug  # Override Qdrant connector logging
 
 # --------------------------
-# Header and Database Test Buttons
+# Sidebar: Database Test Buttons
 # --------------------------
-st.title("Book Recommender System")
-st.write("This demo integrates Collaborative Filtering (via Neo4j) and Semantic Search (via Qdrant).")
-
-col1, col2 = st.columns(2)
-with col1:
-    st.header("Neo4j Database")
+with st.sidebar:
+    st.header("Database Connections")
     if st.button("Test Neo4j Connection", key="neo4j_test"):
         if neo4j_conn.connect():
             st.success("Neo4j Connection Successful")
@@ -47,8 +47,6 @@ with col1:
         else:
             st.error("Neo4j Connection Failed")
             log_to_debug("Failed to connect to Neo4j", "error")
-with col2:
-    st.header("Qdrant Cloud")
     if st.button("Test Qdrant Connection", key="qdrant_test"):
         status, message = qdrant_conn.connect()
         if status:
@@ -59,7 +57,7 @@ with col2:
             log_to_debug(f"Failed to connect to Qdrant: {message}", "error")
 
 # --------------------------
-# User ID Input (Displayed on Main Page)
+# Main Page: User Identification
 # --------------------------
 st.header("User Identification")
 user_id = st.text_input("Enter your User ID (if new, leave blank):")
@@ -67,7 +65,24 @@ if not user_id:
     user_id = "temp_user"
 
 # --------------------------
-# Mode Selection: "Rate Books" or "Describe Your Query"
+# Main Page: Additional Filters (Optional)
+# --------------------------
+with st.expander("Additional Filters (Optional)", expanded=False):
+    # Oldest Publication Date: if not set, no filtering on publication date is applied.
+    min_pub_date = st.date_input("Oldest Publication Date", value=None)
+    # Maximum Number of Pages: default value of 1000 means no filter.
+    max_pages = st.number_input("Maximum Number of Pages", min_value=1, value=1000)
+    # Available as Ebook checkbox.
+    is_ebook = st.checkbox("Available as Ebook")
+    # Format dropdown: first option is "No Preference".
+    format_filter = st.selectbox("Format", ["No Preference", "Paperback", "Hardcover", "Mass Market Paperback", "Ebook"])
+    # Minimum Average Rating.
+    min_average_rating = st.number_input("Minimum Average Rating", min_value=0.0, max_value=5.0, value=0.0, step=0.1)
+    # Minimum Rating Count.
+    min_rating_count = st.number_input("Minimum Rating Count", min_value=0, value=0)
+
+# --------------------------
+# Main Page: Recommendation Mode
 # --------------------------
 st.header("Recommendation Mode")
 mode = st.radio("Choose how you want to get recommendations:",
@@ -76,7 +91,6 @@ mode = st.radio("Choose how you want to get recommendations:",
 # --------------------------
 # Mode: Rate Books
 # --------------------------
-# In Rate Books mode, the user selects books via auto-complete (from Neo4j) and rates them.
 rated_books_data = {}
 if mode == "Rate Books":
     st.subheader("Rate Books")
@@ -84,7 +98,6 @@ if mode == "Rate Books":
     with st.spinner("Loading available book titles from Neo4j..."):
         available_books = neo4j_conn.get_all_book_titles(limit=1000)
     if available_books:
-        # Create a dictionary mapping title to work_id
         book_options = {record["title"]: record["work_id"] for record in available_books}
     else:
         book_options = {}
@@ -105,7 +118,7 @@ if mode == "Describe Your Query":
                                placeholder="Describe your book preferences here...")
 
 # --------------------------
-# Recommendation Trigger Button
+# Main Page: Get Recommendations Button and Logic
 # --------------------------
 if st.button("Get Recommendations"):
     # --------------------------
@@ -131,7 +144,6 @@ if st.button("Get Recommendations"):
             with st.spinner(f"Searching similar books for '{current_query}'..."):
                 q_results = qdrant_conn.search_similar_books(query_text=current_query, limit=5)
                 formatted = qdrant_conn.format_results(q_results)
-            # Aggregate semantic results: boost score = user_rating * qdrant_score.
             for result in formatted:
                 rid = result.get("work_id")
                 if not rid:
@@ -141,6 +153,7 @@ if st.button("Get Recommendations"):
                     aggregated_semantic[rid]["qdrant_score"] += boost
                 else:
                     aggregated_semantic[rid] = {
+                        "work_id": rid,
                         "title": result.get("title", "Unknown"),
                         "qdrant_score": boost
                     }
@@ -174,7 +187,6 @@ if st.button("Get Recommendations"):
     # --------------------------
     cf_results = []
     if mode == "Rate Books":
-        # Check if at least 2 books are rated 4.0 or above.
         count_high_ratings = sum(1 for data in rated_books_data.values() if data["rating"] >= 4.0)
         if count_high_ratings < 2:
             st.error("Please rate at least 2 books with a rating of 4.0 or higher for collaborative filtering recommendations.")
@@ -188,20 +200,15 @@ if st.button("Get Recommendations"):
     # Aggregation of Recommendations
     # --------------------------
     def aggregate_recommendations(cf_results, semantic_results, boost_factor=0.5):
-        """
-        Aggregates recommendations from CF (Neo4j) and Semantic (Qdrant) search.
-        For Rate Books mode, CF is the base; if a book appears in both, boost its CF score.
-        """
         aggregated = {}
-        # Use CF results as base.
         for item in cf_results:
             work_id = item["work_id"]
             aggregated[work_id] = {
+                "work_id": work_id,
                 "title": item.get("title"),
                 "cf_score": item.get("cf_score", 0),
                 "qdrant_score": 0
             }
-        # Boost CF results if they also appear in semantic results.
         for item in semantic_results:
             work_id = item.get("work_id")
             if work_id and work_id in aggregated:
@@ -218,21 +225,56 @@ if st.button("Get Recommendations"):
         final_recommendations = sorted(semantic_results, key=lambda x: x.get("score", 0), reverse=True)
 
     # --------------------------
-    # Display Final Aggregated Recommendations
+    # Query PostgreSQL for Full Metadata Using Additional Filters
     # --------------------------
-    if final_recommendations:
-        st.success(f"Found {len(final_recommendations)} recommended books.")
-        for rec in final_recommendations:
+    recommended_work_ids = []
+    if mode == "Rate Books" and final_recommendations:
+        recommended_work_ids = [rec["work_id"] for rec in final_recommendations if rec.get("work_id")]
+    elif mode == "Describe Your Query" and semantic_results:
+        recommended_work_ids = [rec.get("work_id") for rec in semantic_results if rec.get("work_id")]
+    
+    try:
+        recommended_work_ids = [int(w) for w in recommended_work_ids]
+    except Exception as e:
+        st.error(f"Error converting work_ids to integers: {e}")
+    
+    # Build filters dictionary (only include filters if user has a preference)
+    filters = {}
+    if max_pages and max_pages != 1000:
+        filters["max_pages"] = max_pages
+    if min_pub_date:
+        filters["min_pub_date"] = min_pub_date
+    if is_ebook:
+        filters["is_ebook"] = True
+    if format_filter and format_filter != "No Preference":
+        filters["format"] = format_filter
+    if min_average_rating and min_average_rating > 0.0:
+        filters["min_average_rating"] = min_average_rating
+    if min_rating_count and min_rating_count > 0:
+        filters["min_rating_count"] = min_rating_count
+
+    enriched_results = []
+    if recommended_work_ids:
+        enriched_results = pg_conn.get_books_metadata(recommended_work_ids, filters=filters)
+
+    # --------------------------
+    # Display Final Enriched Recommendations
+    # --------------------------
+    if enriched_results:
+        st.success(f"Displaying {len(enriched_results)} enriched recommended books.")
+        for book in enriched_results:
             with st.container():
-                col1, col2 = st.columns([1, 4])
-                with col1:
-                    score = rec.get("combined_score", rec.get("score", 0))
-                    st.metric("Score", f"{score:.2f}")
-                with col2:
-                    st.markdown(f"### {rec['title']}")
+                st.markdown(f"### {book['title']}")
+                st.write(f"**ISBN:** {book['isbn']}")
+                st.write(f"**Authors:** {book['author_names']}")
+                st.write(f"**Pages:** {book['num_pages']}")
+                st.write(f"**Average Rating:** {book['average_rating']}")
+                st.write(f"**Publisher:** {book['publisher']}")
+                st.write(f"**Description:** {book['description']}")
+                st.write(f"[More Info]({book['link']})")
                 st.divider()
     else:
-        st.warning("No recommendations found.")
+        st.warning("No enriched results found matching the filter criteria.")
 
     # --------------------------
     # Clear Temporary User Data (for temp_user only)
@@ -247,7 +289,7 @@ if st.button("Get Recommendations"):
 # --------------------------
 with st.expander("Debug Messages", expanded=False):
     if not st.session_state.debug_messages:
-        st.write("No debug messages yet. Use the test buttons above to see connection debug messages.")
+        st.write("No debug messages yet. Use the test buttons in the sidebar to see connection debug messages.")
     else:
         for msg in reversed(st.session_state.debug_messages):
             if msg["level"] == "error":

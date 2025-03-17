@@ -1,3 +1,4 @@
 .DS_Store
 book-crossing-dataset/data/
 BookRec/neo4j_import/
+BookRec/postgres_init/
