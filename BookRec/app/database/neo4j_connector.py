@@ -48,25 +48,28 @@ class Neo4jConnector:
         with a 'rating' property.
         """
         cf_query = """
-        // Step 1: Get books the target user rated highly.
-        MATCH (target:User {user_id: $user_id})-[r:INTERACTED]->(b:Book)
-        WHERE r.rating >= $min_rating
-        WITH target, collect(b.work_id) AS targetBooks
-
-        // Step 2: Find similar users who also rated these books highly.
-        MATCH (target)-[r:INTERACTED]->(b:Book)<-[:INTERACTED]-(other:User)
-        WHERE r.rating >= $min_rating AND other.user_id <> target.user_id
-        WITH target, other, count(b) AS commonBooks, targetBooks
-        WHERE commonBooks >= $min_common_books
-
-        // Step 3: Retrieve additional books that these similar users rated highly.
+        // Step 1: Get target user's ratings for common books
+        MATCH (target:User {user_id: "temp_user"})-[r:INTERACTED]->(b:Book)
+        WITH target, collect({work_id: b.work_id, rating: r.rating}) AS targetRatings
+        // Step 2: Find common books between target and other users and compute similarity per common book
+        MATCH (target)-[r1:INTERACTED]->(b:Book)<-[:INTERACTED]-(other:User)
+        WHERE other.user_id <> target.user_id
+        WITH target, targetRatings, other, b.work_id AS commonBook, r1.rating AS otherRating,
+                head([t IN targetRatings WHERE t.work_id = b.work_id]) AS targetRating
+        WITH target, targetRatings, other, (1 - abs(targetRating.rating - otherRating)/4.0) AS simScore
+        // Step 3: For each similar user, average the similarity scores over common books
+        WITH target, targetRatings, other, collect(simScore) AS simScores, count(*) AS commonCount
+        WHERE commonCount >= 2
+        WITH target, targetRatings, other, reduce(s = 0.0, x IN simScores | s + x) / size(simScores) AS user_similarity
+        // Step 4: Get candidate recommendations from similar users (books not rated by target)
         MATCH (other)-[r2:INTERACTED]->(rec:Book)
-        WHERE r2.rating >= $min_rating AND NOT rec.work_id IN targetBooks
-        WITH rec, count(DISTINCT other) AS similarUserCount, avg(r2.rating) AS avgRating
-        RETURN rec.work_id AS work_id, rec.title AS title, similarUserCount, avgRating,
-               (similarUserCount * avgRating) AS cf_score
+        WHERE NOT rec.work_id IN [t IN targetRatings | t.work_id]
+        WITH rec, user_similarity, r2.rating AS candidateRating
+        // Step 5: For each candidate book, sum weighted ratings from all similar users and compute average
+        WITH rec, sum(user_similarity * candidateRating) AS weightedSum, count(candidateRating) AS ratingCount
+        RETURN rec.work_id AS work_id, rec.title AS title, weightedSum / ratingCount AS cf_score
         ORDER BY cf_score DESC
-        LIMIT $limit
+        LIMIT 10
         """
         params = {
             "user_id": user_id,

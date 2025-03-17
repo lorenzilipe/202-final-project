@@ -142,12 +142,16 @@ class QdrantConnector:
         """
         if not results:
             return []
-            
+        
         formatted_results = []
         for i, result in enumerate(results):
+            print("DEBUG: Qdrant payload:", result.payload)
+
             # Extract book information from payload
             title = result.payload.get('title', 'Unknown')
             summary = result.payload.get('summary', 'No summary available')
+            # Extract work_id from payload (if available)
+            work_id = result.payload.get('work_id')
             
             # Truncate long summaries
             if len(summary) > 200:
@@ -158,7 +162,8 @@ class QdrantConnector:
                 "rank": i+1,
                 "score": round(result.score, 4),
                 "title": title,
-                "summary": summary
+                "summary": summary,
+                "work_id": work_id
             }
             formatted_results.append(formatted_result)
             

@@ -36,6 +36,11 @@ neo4j_conn, qdrant_conn, pg_conn = init_connections()
 qdrant_conn.log = log_to_debug  # Override Qdrant connector logging
 
 # --------------------------
+# Get Description Mapping from PostgreSQL
+# --------------------------
+desc_mapping = pg_conn.get_description_mapping()
+
+# --------------------------
 # Sidebar: Database Test Buttons
 # --------------------------
 with st.sidebar:
@@ -68,17 +73,11 @@ if not user_id:
 # Main Page: Additional Filters (Optional)
 # --------------------------
 with st.expander("Additional Filters (Optional)", expanded=False):
-    # Oldest Publication Date: if not set, no filtering on publication date is applied.
     min_pub_date = st.date_input("Oldest Publication Date", value=None)
-    # Maximum Number of Pages: default value of 1000 means no filter.
     max_pages = st.number_input("Maximum Number of Pages", min_value=1, value=1000)
-    # Available as Ebook checkbox.
     is_ebook = st.checkbox("Available as Ebook")
-    # Format dropdown: first option is "No Preference".
     format_filter = st.selectbox("Format", ["No Preference", "Paperback", "Hardcover", "Mass Market Paperback", "Ebook"])
-    # Minimum Average Rating.
     min_average_rating = st.number_input("Minimum Average Rating", min_value=0.0, max_value=5.0, value=0.0, step=0.1)
-    # Minimum Rating Count.
     min_rating_count = st.number_input("Minimum Rating Count", min_value=0, value=0)
 
 # --------------------------
@@ -129,7 +128,8 @@ if st.button("Get Recommendations"):
         st.info("Generating semantic recommendations based on your rated books...")
         aggregated_semantic = {}
         for work_id, info in rated_books_data.items():
-            current_query = info["title"]
+            # Use the description from PostgreSQL if available; otherwise fall back to the title.
+            current_query = desc_mapping.get(int(work_id), info["title"])
             user_rating = info["rating"]
             if not hasattr(qdrant_conn, 'client') or qdrant_conn.client is None:
                 status, message = qdrant_conn.connect()
@@ -141,7 +141,7 @@ if st.button("Get Recommendations"):
                     if not qdrant_conn.load_model():
                         st.error("Failed to load embedding model.")
                         st.stop()
-            with st.spinner(f"Searching similar books for '{current_query}'..."):
+            with st.spinner(f"Searching similar books for description query..."):
                 q_results = qdrant_conn.search_similar_books(query_text=current_query, limit=5)
                 formatted = qdrant_conn.format_results(q_results)
             for result in formatted:
@@ -187,40 +187,38 @@ if st.button("Get Recommendations"):
     # --------------------------
     cf_results = []
     if mode == "Rate Books":
-        count_high_ratings = sum(1 for data in rated_books_data.values() if data["rating"] >= 4.0)
-        if count_high_ratings < 2:
-            st.error("Please rate at least 2 books with a rating of 4.0 or higher for collaborative filtering recommendations.")
-            log_to_debug("Not enough high ratings to perform CF.", "warning")
-        else:
-            with st.spinner("Computing collaborative filtering recommendations via Neo4j..."):
-                cf_results = neo4j_conn.get_collaborative_recommendations(user_id=user_id, limit=10)
-                log_to_debug(f"CF Results: {cf_results}", "info")
-
+        with st.spinner("Computing collaborative filtering recommendations via Neo4j..."):
+            cf_results = neo4j_conn.get_collaborative_recommendations(user_id=user_id, min_rating=0.0, limit=10)
+            log_to_debug(f"CF Results: {cf_results}", "info")
+    
     # --------------------------
-    # Aggregation of Recommendations
+    # Decide on Final Recommendations
     # --------------------------
-    def aggregate_recommendations(cf_results, semantic_results, boost_factor=0.5):
-        aggregated = {}
-        for item in cf_results:
-            work_id = item["work_id"]
-            aggregated[work_id] = {
-                "work_id": work_id,
-                "title": item.get("title"),
-                "cf_score": item.get("cf_score", 0),
-                "qdrant_score": 0
-            }
-        for item in semantic_results:
-            work_id = item.get("work_id")
-            if work_id and work_id in aggregated:
-                aggregated[work_id]["qdrant_score"] = item.get("qdrant_score", item.get("score", 0))
-        for work_id, rec in aggregated.items():
-            rec["combined_score"] = rec["cf_score"] + boost_factor * rec["qdrant_score"]
-        aggregated_list = list(aggregated.values())
-        aggregated_list.sort(key=lambda x: x["combined_score"], reverse=True)
-        return aggregated_list
-
     if mode == "Rate Books":
-        final_recommendations = aggregate_recommendations(cf_results, semantic_results, boost_factor=0.5)
+        if not cf_results:
+            st.warning("Collaborative Filtering returned no results, using semantic recommendations only.")
+            final_recommendations = semantic_results
+        else:
+            def aggregate_recommendations(cf_results, semantic_results, boost_factor=0.5):
+                aggregated = {}
+                for item in cf_results:
+                    work_id = item["work_id"]
+                    aggregated[work_id] = {
+                        "work_id": work_id,
+                        "title": item.get("title"),
+                        "cf_score": item.get("cf_score", 0),
+                        "qdrant_score": 0
+                    }
+                for item in semantic_results:
+                    work_id = item.get("work_id")
+                    if work_id and work_id in aggregated:
+                        aggregated[work_id]["qdrant_score"] = item.get("qdrant_score", item.get("score", 0))
+                for work_id, rec in aggregated.items():
+                    rec["combined_score"] = rec["cf_score"] + boost_factor * rec["qdrant_score"]
+                aggregated_list = list(aggregated.values())
+                aggregated_list.sort(key=lambda x: x["combined_score"], reverse=True)
+                return aggregated_list
+            final_recommendations = aggregate_recommendations(cf_results, semantic_results, boost_factor=0.5)
     else:
         final_recommendations = sorted(semantic_results, key=lambda x: x.get("score", 0), reverse=True)
 
@@ -238,7 +236,6 @@ if st.button("Get Recommendations"):
     except Exception as e:
         st.error(f"Error converting work_ids to integers: {e}")
     
-    # Build filters dictionary (only include filters if user has a preference)
     filters = {}
     if max_pages and max_pages != 1000:
         filters["max_pages"] = max_pages

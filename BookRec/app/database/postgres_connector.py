@@ -100,3 +100,21 @@ class PostgresConnector:
         except Exception as e:
             print(f"Error querying PostgreSQL: {e}")
             return []
+    
+    def get_description_mapping(self):
+        """
+        Returns a dictionary mapping work_id (as an integer) to book description.
+        """
+        if not self.conn:
+            if not self.connect():
+                return {}
+        query = "SELECT work_id, description FROM books"
+        try:
+            with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query)
+                results = cur.fetchall()
+                mapping = {int(row['work_id']): row['description'] for row in results}
+                return mapping
+        except Exception as e:
+            print(f"Error querying description mapping: {e}")
+            return {}
