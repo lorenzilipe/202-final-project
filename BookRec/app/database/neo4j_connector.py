@@ -31,142 +31,85 @@ class Neo4jConnector:
     def execute_query(self, query, parameters=None):
         assert self.driver is not None, "Driver not initialized. Call connect() first."
         
-        with self.driver.session() as session:
-            result = session.run(query, parameters or {})
-            return [record.data() for record in result]
-            
-    def get_book_info(self, work_id):
-        """Get information about a specific book"""
-        query = """
-        MATCH (b:Book {work_id: $work_id})
-        RETURN b.work_id as work_id, b.title as title, b.average_rating as average_rating, b.ratings_count as ratings_count
-        """
-        results = self.execute_query(query, {"work_id": work_id})
-        return results[0] if results else None
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, parameters or {})
+                return [record.data() for record in result]
+        except Exception as e:
+            print(f"Query execution error: {str(e)}")
+            return []
 
+    def get_collaborative_recommendations(self, user_id, min_rating=4.0, min_common_books=2, limit=10):
+        """
+        Returns collaborative filtering recommendations based on the user's ratings.
+        The query assumes that each user has INTERACTED relationships with Book nodes, 
+        with a 'rating' property.
+        """
+        cf_query = """
+        // Step 1: Get target user's ratings for common books
+        MATCH (target:User {user_id: "temp_user"})-[r:INTERACTED]->(b:Book)
+        WITH target, collect({work_id: b.work_id, rating: r.rating}) AS targetRatings
+        // Step 2: Find common books between target and other users and compute similarity per common book
+        MATCH (target)-[r1:INTERACTED]->(b:Book)<-[:INTERACTED]-(other:User)
+        WHERE other.user_id <> target.user_id
+        WITH target, targetRatings, other, b.work_id AS commonBook, r1.rating AS otherRating,
+                head([t IN targetRatings WHERE t.work_id = b.work_id]) AS targetRating
+        WITH target, targetRatings, other, (1 - abs(targetRating.rating - otherRating)/4.0) AS simScore
+        // Step 3: For each similar user, average the similarity scores over common books
+        WITH target, targetRatings, other, collect(simScore) AS simScores, count(*) AS commonCount
+        WHERE commonCount >= 2
+        WITH target, targetRatings, other, reduce(s = 0.0, x IN simScores | s + x) / size(simScores) AS user_similarity
+        // Step 4: Get candidate recommendations from similar users (books not rated by target)
+        MATCH (other)-[r2:INTERACTED]->(rec:Book)
+        WHERE NOT rec.work_id IN [t IN targetRatings | t.work_id]
+        WITH rec, user_similarity, r2.rating AS candidateRating
+        // Step 5: For each candidate book, sum weighted ratings from all similar users and compute average
+        WITH rec, sum(user_similarity * candidateRating) AS weightedSum, count(candidateRating) AS ratingCount
+        RETURN rec.work_id AS work_id, rec.title AS title, weightedSum / ratingCount AS cf_score
+        ORDER BY cf_score DESC
+        LIMIT 10
+        """
+        params = {
+            "user_id": user_id,
+            "min_rating": min_rating,
+            "min_common_books": min_common_books,
+            "limit": limit
+        }
+        return self.execute_query(cf_query, params)
 
-    #This is the funtion that is called for the collaberative filtering recommendations, currenly it always returns empty :(
-    # need to be fixed!!!!! 
-    def get_similar_books_cf(self, book_ids, limit=5):
+    def get_all_book_titles(self, limit=1000):
         """
-        Get book recommendations based on collaborative filtering
-        
-        Parameters:
-        - book_ids: List of book IDs the user likes
-        - limit: Maximum number of recommendations to return
+        Returns a list of all book titles and their work_ids from the database.
         """
-        # Check if we only have one book selected
-        if len(book_ids) == 1:
-            # More relaxed query when only one book is selected
-            query = """
-            // Match users who read the selected book
-            MATCH (user:User)-[r:INTERACTED]->(seed:Book)
-            WHERE seed.work_id IN $book_ids
-            
-            // Find other books these users read
-            MATCH (user)-[r2:INTERACTED]->(recommendation:Book)
-            WHERE NOT recommendation.work_id IN $book_ids
-            
-            // Group by book and count how many users who read the seed book also read this book
-            WITH recommendation, COUNT(DISTINCT user) as userOverlap, AVG(r2.rating) as avgRating
-            
-            // Return recommended books ordered by overlap count
-            RETURN 
-                recommendation.work_id as work_id,
-                recommendation.title as title,
-                recommendation.average_rating as average_rating,
-                recommendation.ratings_count as ratings_count,
-                avgRating as user_rating,
-                userOverlap as score
-            ORDER BY score DESC, avgRating DESC
-            LIMIT $limit
-            """
-        else:
-            # Original query for multiple books, but with rating threshold lowered
-            query = """
-            // Match users who interacted with the input books
-            MATCH (user:User)-[r:INTERACTED]->(seed:Book)
-            WHERE seed.work_id IN $book_ids AND r.rating >= 3
-            
-            // Find other books these users interacted with
-            MATCH (user)-[r2:INTERACTED]->(recommendation:Book)
-            WHERE r2.rating >= 3
-            AND NOT recommendation.work_id IN $book_ids
-            
-            // Group by book and count how many users who liked the seed books also liked this book
-            WITH recommendation, COUNT(DISTINCT user) as userOverlap, AVG(r2.rating) as avgRating
-            
-            // Return recommended books ordered by overlap count
-            RETURN 
-                recommendation.work_id as work_id,
-                recommendation.title as title,
-                recommendation.average_rating as average_rating,
-                recommendation.ratings_count as ratings_count,
-                avgRating as user_rating,
-                userOverlap as score
-            ORDER BY score DESC, avgRating DESC
-            LIMIT $limit
-            """
-        
-        return self.execute_query(query, {"book_ids": book_ids, "limit": limit})
-    
-    def format_cf_results(self, results):
-        """Format collaborative filtering results for display"""
-        formatted_results = []
-        for i, result in enumerate(results):
-            # Create a structured result
-            formatted_result = {
-                "rank": i+1,
-                "book_id": result["work_id"],
-                "score": result["score"],
-                "title": result["title"],
-                "average_rating": result.get("average_rating", 0),
-                "ratings_count": result.get("ratings_count", 0),
-                "user_rating": result.get("user_rating", 0),
-                "summary": f"Average Rating: {result.get('average_rating', 'N/A')} from {result.get('ratings_count', 0)} ratings",
-                "source": "collaborative"
-            }
-            formatted_results.append(formatted_result)
-            
-        return formatted_results
-            
-    def get_user_reading_history(self, user_id, limit=10):
-        """Get books that a user has interacted with"""
-        query = """
-        // Find all books rated by this user
-        MATCH (user:User {user_id: $user_id})-[r:INTERACTED]->(book:Book)
-        
-        // Return books with rating information
-        RETURN 
-            book.work_id as work_id,
-            book.title as title,
-            r.rating as rating,
-            book.average_rating as average_rating,
-            book.ratings_count as ratings_count
-        ORDER BY r.rating DESC
-        LIMIT $limit
-        """
-        
-        return self.execute_query(query, {"user_id": user_id, "limit": limit})
-        
-    def get_popular_books(self, limit=10):
-        """Get the most popular books based on ratings count"""
-        query = """
-        // Match all books
-        MATCH (book:Book)
-        
-        // Only include books with sufficient ratings
-        WHERE book.ratings_count >= 1000
-        
-        // Return popular books
-        RETURN 
-            book.work_id as work_id,
-            book.title as title,
-            book.average_rating as average_rating,
-            book.ratings_count as ratings_count,
-            book.ratings_count * book.average_rating as score
-        ORDER BY score DESC
-        LIMIT $limit
-        """
-        
+        query = "MATCH (b:Book) RETURN b.title AS title, b.work_id AS work_id LIMIT $limit"
         return self.execute_query(query, {"limit": limit})
+    
+    def insert_user_ratings(self, user_id, rated_books_data):
+        """
+        Inserts ratings for a given user into the database.
+        rated_books_data should be a dictionary where each key is a work_id and each value is a dictionary
+        with at least a 'rating' key.
+        """
+        query = """
+        UNWIND $ratings AS ratingData
+        MERGE (u:User {user_id: $user_id})
+        WITH u, ratingData
+        MATCH (b:Book {work_id: ratingData.work_id})
+        MERGE (u)-[r:INTERACTED]->(b)
+        SET r.rating = ratingData.rating
+        """
+        params = {
+            "user_id": user_id,
+            "ratings": [{"work_id": work_id, "rating": data["rating"]} for work_id, data in rated_books_data.items()]
+        }
+        return self.execute_query(query, params)
+
+    def clear_temp_user(self, user_id):
+        """
+        Clears the temporary user's data by deleting the user node and all its relationships.
+        """
+        query = """
+        MATCH (u:User {user_id: $user_id})
+        DETACH DELETE u
+        """
+        return self.execute_query(query, {"user_id": user_id})

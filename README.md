@@ -1,6 +1,70 @@
 # DSC 202 Final Project
 
-In the book crossing data-cleaning notebook, the clean_and_standardize_series() function is the one that I used to clean the book titles, authors, and user cities and countries... Make sure data has been processed with this function before trying to do any merges so that all da tings match!
+**Link to presentation:** [https://www.youtube.com/watch?v=pKXsPabvcv0](https://www.youtube.com/watch?v=pKXsPabvcv0)
+
+# Installation
+
+## Downloads
+1. Clone the repository into a folder.
+2. Download [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it.
+3. Download [UCSD Goodreads Dataset](https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html#:~:text=goodreads_reviews_children.json.gz-,Comics%20%26%20Graphic,-\(89%2C411%20books%2C%207%2C347%2C630) (Comics & Graphic)]
+
+## Cleaning data
+Since the clean data is too large to store on GitHub, you must do it yourself.
+1. Place UCSD Goodreads json files into ```book-crossing-dataset/data```
+2. Run all cells in ```book-crossing-dataset/goodreads_data_pipeline.ipynb``` and ```book-crossing-dataset/interactions_work_id.ipynb``` and ```goodreads_data_pipeline_postgres```
+
+## Moving clean data to app container
+1. Move ```goodreads_books_comics_graphic_cleaned_neo4j.csv``` and ```goodreads_interactions_comics_graphic_cleaned.csv``` into ```BookRec/neo4j_import/```
+2. Move ```goodreads_books_cleaned.csv``` and ```goodreads_authors_cleaned.csv``` into ```BookRec/postgres_init/```
+
+## Loading data into Neo4j
+Now that the data can be detected by the container, we must upload it to the Neo4j db
+
+First, run:
+
+```shell
+> docker-compose up -d
+```
+
+Then, navigate to [http://localhost:7474/browser/](http://localhost:7474/browser/) and enter the username: ```neo4j``` and password: ```dsc202friends```.
+
+Finally, run the following code block in the neo4j terminal:
+
+```cypher
+CREATE CONSTRAINT book_unique IF NOT EXISTS 
+FOR (b:Book) REQUIRE b.work_id IS UNIQUE;
+
+CREATE CONSTRAINT user_unique IF NOT EXISTS 
+FOR (u:User) REQUIRE u.user_id IS UNIQUE;
+
+LOAD CSV WITH HEADERS FROM 'file:///goodreads_books_comics_graphic_cleaned_neo4j.csv' AS row
+MERGE (b:Book {work_id: row.work_id})
+SET b.title = row.title,
+    b.authors = row.authors,
+    b.ratings_count = toInteger(row.ratings_count),
+    b.average_rating = toFloat(row.average_rating);
+
+:auto CALL {
+  LOAD CSV WITH HEADERS FROM 'file:///goodreads_interactions_comics_graphic_cleaned.csv' AS row
+  MERGE (u:User {user_id: row.user_id})
+  WITH row, u
+  MATCH (b:Book {work_id: row.work_id})
+  MERGE (u)-[r:INTERACTED]->(b)
+  SET r.rating = toFloat(row.rating),
+      r.timestamp = row.timestamp
+  RETURN count(*) AS batchCount
+} IN TRANSACTIONS OF 500 ROWS
+RETURN "Completed" AS status;
+```
+
+# Usage
+
+First, ensure that the Docker container is running using ```docker-compose up -d```. If not, see the Installation section above.
+
+Navigate to the application site at [http://localhost:8501/](http://localhost:8501/).
+
+Follow the on-screen instructions and get your book recommendations!
 
 # Qdrant Book Recomendation files
 

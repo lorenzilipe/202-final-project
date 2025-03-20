@@ -176,19 +176,40 @@ class QdrantConnector:
             return []
     
     def format_results(self, results):
-        """Format search results for display"""
+        """
+        Format search results into a readable structure
+        
+        Parameters:
+        - results: Search results from Qdrant
+        
+        Returns:
+        - List of dictionaries with formatted book information
+        """
+        if not results:
+            return []
+        
         formatted_results = []
         for i, result in enumerate(results):
+            print("DEBUG: Qdrant payload:", result.payload)
+
+            # Extract book information from payload
+            title = result.payload.get('title', 'Unknown')
+            summary = result.payload.get('summary', 'No summary available')
+            # Extract work_id from payload (if available)
+            work_id = result.payload.get('work_id')
+            
+            # Truncate long summaries
+            if len(summary) > 200:
+                summary = summary[:200] + "..."
+                
             # Create a structured result
             formatted_result = {
                 "rank": i+1,
                 "book_id": result.id,
                 "score": round(result.score, 4),
-                "title": result.payload.get('title', 'Unknown'),
-                "summary": result.payload.get('summary', 'No summary available')[:200] + "..." 
-                           if len(result.payload.get('summary', '')) > 200 
-                           else result.payload.get('summary', 'No summary available'),
-                "source": "semantic"
+                "title": title,
+                "summary": summary,
+                "work_id": work_id
             }
             formatted_results.append(formatted_result)
             
