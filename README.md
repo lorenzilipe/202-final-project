@@ -69,9 +69,11 @@ Navigate to the application site at [http://localhost:8501/](http://localhost:85
 
 Follow the on-screen instructions and get your book recommendations!
 
-# Qdrant Book Recomendation files
+## Qdrant Book Recomendation files
 
-## Folder Structure
+While it is not necessary to run these files to setup and use our application yourself, here is an explanation of how the Qdrant system works.
+
+### Folder Structure
 
 The `qdrant/bookrec_qdrant` folder contains three main files for the book recommendation system:
 
@@ -93,12 +95,3 @@ The `qdrant/bookrec_qdrant` folder contains three main files for the book recomm
   - Enables semantic search with natural language queries
   - Returns relevant book recommendations based on query similarity
 - **Integration**: This will be incorporated into the final book recommendation function
-
-## How It Works
-
-The system uses vector embeddings to represent book descriptions semantically. When you search with a text query, it:
-1. Converts your query to a vector embedding
-2. Finds the most similar book embeddings in the database
-3. Returns the matching books as recommendations
-
-This semantic search approach allows users to find relevant books using natural language descriptions rather than just keywords.
