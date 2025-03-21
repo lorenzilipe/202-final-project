@@ -1,4 +1,7 @@
 .DS_Store
-book-crossing-dataset/data/
-BookRec/neo4j_import/
-BookRec/postgres_init/
+data-processing/data/*
+!data-processing/data/.gitkeep
+BookRec/neo4j_import/*
+!BookRec/neo4j_import/.gitkeep
+BookRec/postgres_init/*
+!BookRec/postgres_init/.gitkeep
