@@ -1,0 +1,34 @@
+CREATE TABLE books (
+   book_id        INTEGER PRIMARY KEY,
+   work_id        INTEGER,
+   isbn           VARCHAR(50),
+   isbn13         VARCHAR(50),
+   asin           VARCHAR(50),
+   kindle_asin    VARCHAR(50),
+   series         INTEGER[],
+   format         VARCHAR(20),
+   publisher      VARCHAR(50),
+   author_ids     INTEGER[],
+   link           VARCHAR(100),
+   publication_date DATE,
+   publication_year INT,
+   publication_month INT,
+   publication_day INT,
+   title          VARCHAR(255),
+   title_without_series VARCHAR(255),
+   is_ebook       BOOLEAN,
+   average_rating FLOAT,
+   text_reviews_count INTEGER,
+   ratings_count  INTEGER,
+   description    TEXT,
+   num_pages      INTEGER
+);
+
+
+CREATE TABLE authors (
+   author_id INTEGER PRIMARY KEY,
+   name VARCHAR(255),
+   average_rating FLOAT,
+   text_reviews_count INTEGER,
+   ratings_count  INTEGER
+)
