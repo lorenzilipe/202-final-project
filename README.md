@@ -4,6 +4,8 @@
 
 **Link to presentation slideshow:** [https://docs.google.com/presentation/d/1o671vR0r_dYCRIOZDwQTxu5LLe__tNdmbrrKeJ7KW0s/edit?usp=sharing]
 
+---
+
 # Installation
 
 ## Downloads
@@ -61,6 +63,8 @@ SET b.title = row.title,
 RETURN "Completed" AS status;
 ```
 
+---
+
 # Usage
 
 First, ensure that the Docker container is running using ```docker-compose up -d```. If not, see the Installation section above.
@@ -69,11 +73,13 @@ Navigate to the application site at [http://localhost:8501/](http://localhost:85
 
 Follow the on-screen instructions and get your book recommendations!
 
-## Qdrant Book Recomendation files
+---
+
+# Qdrant Book Recomendation files
 
 While it is not necessary to run these files to setup and use our application yourself, here is an explanation of how the Qdrant system works.
 
-### Folder Structure
+## Folder Structure
 
 The `qdrant/bookrec_qdrant` folder contains three main files for the book recommendation system:
 
