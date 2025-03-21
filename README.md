@@ -13,12 +13,13 @@
 
 ## Cleaning data
 Since the clean data is too large to store on GitHub, you must do it yourself.
-1. Place UCSD Goodreads json files into ```book-crossing-dataset/data```
-2. Run all cells in ```book-crossing-dataset/goodreads_data_pipeline.ipynb``` and ```book-crossing-dataset/interactions_work_id.ipynb``` and ```goodreads_data_pipeline_postgres```
+1. Run all cells in ```data-processing/goodreads_data_pipeline.ipynb```, ```data-processing/interactions_work_id.ipynb``` and ```data-processing/goodreads_data_pipeline_postgres```
 
 ## Moving clean data to app container
-1. Move ```goodreads_books_comics_graphic_cleaned_neo4j.csv``` and ```goodreads_interactions_comics_graphic_cleaned.csv``` into ```BookRec/neo4j_import/```
-2. Move ```goodreads_books_cleaned.csv``` and ```goodreads_authors_cleaned.csv``` into ```BookRec/postgres_init/```
+After running the data cleaning notebooks in the step above, do the following:
+
+1. Move ```data-processing/data/goodreads_books_comics_graphic_cleaned_neo4j.csv``` and ```data-processing/data/goodreads_interactions_comics_graphic_cleaned.csv``` into ```BookRec/neo4j_import/```
+2. Move ```data-processing/data/goodreads_books_cleaned.csv``` and ```data-processing/data/goodreads_authors_cleaned.csv``` into ```BookRec/postgres_init/```
 
 ## Loading data into Neo4j
 Now that the data can be detected by the container, we must upload it to the Neo4j db
