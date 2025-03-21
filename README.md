@@ -9,7 +9,7 @@
 ## Downloads
 1. Clone the repository into a folder.
 2. Download [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it.
-3. Download [UCSD Goodreads Dataset (Comics & Graphic)](https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html#:~:text=goodreads_reviews_children.json.gz-,Comics%20%26%20Graphic,-\(89%2C411%20books%2C%207%2C347%2C630)
+3. (Optional) Download [UCSD Goodreads Dataset (Comics & Graphic)](https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html#:~:text=goodreads_reviews_children.json.gz-,Comics%20%26%20Graphic,-\(89%2C411%20books%2C%207%2C347%2C630)
 
 ## Cleaning data
 Since the clean data is too large to store on GitHub, you must do it yourself.
