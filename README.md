@@ -15,7 +15,10 @@
 
 ## Cleaning data
 Since the clean data is too large to store on GitHub, you must do it yourself.
+
 1. Run all cells in ```data-processing/goodreads_data_pipeline.ipynb```, ```data-processing/interactions_work_id.ipynb``` and ```data-processing/goodreads_data_pipeline_postgres```
+
+This will create some .csv files within ```./data-processing/data/```.
 
 ## Moving clean data to app container
 After running the data cleaning notebooks in the step above, do the following:
