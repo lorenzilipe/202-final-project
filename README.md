@@ -107,4 +107,6 @@ The `qdrant/bookrec_qdrant` folder contains three main files for the book recomm
 
 # Postgres
 
-Use the 'data_pipeline_postgres' file in the data processing folder to obtain the clean data. Then use the schema in 'postgres_schema.txt' as your schema when importing data into postgres.
+Use the ```data_pipeline_postgres``` file in the data processing folder to obtain the clean data. The resulting data will be ```data/goodreads_books_cleaned_postgres.csv``` and ```data/goodreads_authors_cleaned.csv```.
+
+Then use the schema in ```postgres_schema.txt``` as your schema when importing data into postgres.
