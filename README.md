@@ -104,3 +104,7 @@ The `qdrant/bookrec_qdrant` folder contains three main files for the book recomm
   - Enables semantic search with natural language queries
   - Returns relevant book recommendations based on query similarity
 - **Integration**: This will be incorporated into the final book recommendation function
+
+# Postgres
+
+Use the 'data_pipeline_postgres' file in the data processing folder to obtain the clean data. Then use the schema in 'postgres_schema.txt' as your schema when importing data into postgres.
