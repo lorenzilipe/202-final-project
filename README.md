@@ -26,7 +26,7 @@ After running the data cleaning notebooks in the step above, do the following:
 ## Loading data into Neo4j
 Now that the data can be detected by the container, we must upload it to the Neo4j db
 
-First, run:
+First, run (from the ```./BookRec/``` directory):
 
 ```shell
 > docker-compose up -d
