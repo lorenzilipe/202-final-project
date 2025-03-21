@@ -1,27 +1,32 @@
 # DSC 202 Final Project
 
-**Link to presentation:** [https://www.youtube.com/watch?v=pKXsPabvcv0](https://www.youtube.com/watch?v=pKXsPabvcv0)
+**Link to presentation video:** [https://www.youtube.com/watch?v=pKXsPabvcv0](https://www.youtube.com/watch?v=pKXsPabvcv0)
+
+**Link to presentation slideshow:** [https://docs.google.com/presentation/d/1o671vR0r_dYCRIOZDwQTxu5LLe__tNdmbrrKeJ7KW0s/edit?usp=sharing](https://docs.google.com/presentation/d/1o671vR0r_dYCRIOZDwQTxu5LLe__tNdmbrrKeJ7KW0s/edit?usp=sharing)
+
+---
 
 # Installation
 
 ## Downloads
 1. Clone the repository into a folder.
 2. Download [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it.
-3. Download [UCSD Goodreads Dataset](https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html#:~:text=goodreads_reviews_children.json.gz-,Comics%20%26%20Graphic,-\(89%2C411%20books%2C%207%2C347%2C630) (Comics & Graphic)]
+3. (Optional) Download [UCSD Goodreads Dataset (Comics & Graphic)](https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html#:~:text=goodreads_reviews_children.json.gz-,Comics%20%26%20Graphic,-\(89%2C411%20books%2C%207%2C347%2C630)
 
 ## Cleaning data
 Since the clean data is too large to store on GitHub, you must do it yourself.
-1. Place UCSD Goodreads json files into ```book-crossing-dataset/data```
-2. Run all cells in ```book-crossing-dataset/goodreads_data_pipeline.ipynb``` and ```book-crossing-dataset/interactions_work_id.ipynb``` and ```goodreads_data_pipeline_postgres```
+1. Run all cells in ```data-processing/goodreads_data_pipeline.ipynb```, ```data-processing/interactions_work_id.ipynb``` and ```data-processing/goodreads_data_pipeline_postgres```
 
 ## Moving clean data to app container
-1. Move ```goodreads_books_comics_graphic_cleaned_neo4j.csv``` and ```goodreads_interactions_comics_graphic_cleaned.csv``` into ```BookRec/neo4j_import/```
-2. Move ```goodreads_books_cleaned.csv``` and ```goodreads_authors_cleaned.csv``` into ```BookRec/postgres_init/```
+After running the data cleaning notebooks in the step above, do the following:
+
+1. Move ```data-processing/data/goodreads_books_comics_graphic_cleaned_neo4j.csv``` and ```data-processing/data/goodreads_interactions_comics_graphic_cleaned.csv``` into ```BookRec/neo4j_import/```
+2. Move ```data-processing/data/goodreads_books_cleaned.csv``` and ```data-processing/data/goodreads_authors_cleaned.csv``` into ```BookRec/postgres_init/```
 
 ## Loading data into Neo4j
 Now that the data can be detected by the container, we must upload it to the Neo4j db
 
-First, run:
+First, run (from the ```./BookRec/``` directory):
 
 ```shell
 > docker-compose up -d
@@ -58,6 +63,8 @@ SET b.title = row.title,
 RETURN "Completed" AS status;
 ```
 
+---
+
 # Usage
 
 First, ensure that the Docker container is running using ```docker-compose up -d```. If not, see the Installation section above.
@@ -66,7 +73,11 @@ Navigate to the application site at [http://localhost:8501/](http://localhost:85
 
 Follow the on-screen instructions and get your book recommendations!
 
+---
+
 # Qdrant Book Recomendation files
+
+While it is not necessary to run these files to setup and use our application yourself, here is an explanation of how the Qdrant system works.
 
 ## Folder Structure
 
@@ -90,12 +101,3 @@ The `qdrant/bookrec_qdrant` folder contains three main files for the book recomm
   - Enables semantic search with natural language queries
   - Returns relevant book recommendations based on query similarity
 - **Integration**: This will be incorporated into the final book recommendation function
-
-## How It Works
-
-The system uses vector embeddings to represent book descriptions semantically. When you search with a text query, it:
-1. Converts your query to a vector embedding
-2. Finds the most similar book embeddings in the database
-3. Returns the matching books as recommendations
-
-This semantic search approach allows users to find relevant books using natural language descriptions rather than just keywords.
