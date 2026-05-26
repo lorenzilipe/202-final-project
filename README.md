@@ -6,7 +6,7 @@ Group Members: Sarah Borsotto, Ryan Clement, Felipe Lorenzi
 
 **Link to presentation slideshow:** [https://docs.google.com/presentation/d/1o671vR0r_dYCRIOZDwQTxu5LLe__tNdmbrrKeJ7KW0s/edit?usp=sharing](https://docs.google.com/presentation/d/1o671vR0r_dYCRIOZDwQTxu5LLe__tNdmbrrKeJ7KW0s/edit?usp=sharing)
 
-**Link to the report:** [https://www.overleaf.com/read/ygdwmxkkdhbt#a34f19]
+**Link to the report:** [https://github.com/lorenzilipe/202-final-project/blob/main/DSC%20202%20Final%20Project%20Report.pdf](https://github.com/lorenzilipe/202-final-project/blob/main/DSC%20202%20Final%20Project%20Report.pdf)
 
 ---
 
